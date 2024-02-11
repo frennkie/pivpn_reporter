@@ -11,12 +11,10 @@ import paho.mqtt.client as mqtt
 import typer
 from typing_extensions import Annotated, List  # Python3.6+
 
+__version__ = "0.1.0"
+
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)-6s %(message)s')
-# format='%(asctime)s %(levelname)-6s %(lineno)-3d %(message)s')
-# format='%(asctime)s %(levelname)-6s %(module)s:%(lineno)d %(message)s'
-
-__version__ = "0.1.0"
 
 
 def version_callback(value: bool):
@@ -27,7 +25,7 @@ def version_callback(value: bool):
 
 class MqttPublishingClient:  # MPC
     def __init__(self,
-                 mqtt_address: str,
+                 mqtt_host: str,
                  mqtt_port: int,
                  mqtt_user: str,
                  mqtt_password: str,
@@ -36,7 +34,7 @@ class MqttPublishingClient:  # MPC
                  update_interval: int,
                  vpn_type: str):
 
-        self.mqtt_address = mqtt_address
+        self.mqtt_host = mqtt_host
         self.mqtt_port = mqtt_port
         self.mqtt_user = mqtt_user
         self.mqtt_password = mqtt_password
@@ -71,7 +69,7 @@ class MqttPublishingClient:  # MPC
     def run(self):
         # print key configuration settings
         logging.info(f'### SETTINGS Start ###')
-        logging.info(f'Connection: {self.mqtt_user}@{self.mqtt_address}:{self.mqtt_port}')
+        logging.info(f'Connection: {self.mqtt_user}@{self.mqtt_host}:{self.mqtt_port}')
         logging.info(f'Discovery topic prefix: {self.discovery_topic_prefix}')
         logging.info(f'Topic prefix: {self.topic_prefix}')
         logging.info(f'VPN type: {self.vpn_type}')
@@ -90,7 +88,7 @@ class MqttPublishingClient:  # MPC
         self.client.username_pw_set(self.mqtt_user, self.mqtt_password)
         self.client.will_set(self.will, payload='offline', qos=0, retain=True)
 
-        self.client.connect(self.mqtt_address, self.mqtt_port, 60)
+        self.client.connect(self.mqtt_host, self.mqtt_port, 60)
 
         # start MQTT loop
         self.client.loop_forever()
@@ -336,7 +334,7 @@ def main(
         logging.getLogger().setLevel(logging.INFO)
 
     mpc = MqttPublishingClient(
-        mqtt_address=mqtt_host,
+        mqtt_host=mqtt_host,
         mqtt_port=mqtt_port,
         mqtt_user=mqtt_user,
         mqtt_password=mqtt_password,
