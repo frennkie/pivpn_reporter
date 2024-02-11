@@ -88,8 +88,25 @@ class MqttPublishingClient:  # MPC
         updated_client_list = self.get_client_list()  # Get an upto date list of clients
         logging.info('Updated client list...')
         logging.info(updated_client_list)
+
         if self.client_list != updated_client_list:  # Compare the previous and current lists
             logging.info('Client lists are different')
+
+            new_clients = [i for i in updated_client_list if i not in self.client_list]
+            logging.info('New clients:')
+            logging.info(new_clients)
+            removed_clients = [i for i in self.client_list if i not in updated_client_list]
+            logging.info('Removed Clients')
+            logging.info(removed_clients)
+            for client_name in new_clients:  # Create discovery data for new clients
+                self.publish_discovery(client_name)
+            for client_name in removed_clients:  # Remove HA entity for removed clients
+                self.remove_discovery(client_name)
+
+        else:
+            logging.debug('Client lists are identical')
+
+        self.publish_client_attributes()
         self.start_period_timer()
 
     def start_period_timer(self):
