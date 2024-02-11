@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "pivpn_reporter"
+version = "0.1.0"
+description = "PIVPN Reporter"
+authors = ["Robert Habermann <mail@rhab.de>"]
+maintainers = ["Robert Habermann <mail@rhab.de>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/frennkie/pivpn_vpnrpt"
+repository = "https://github.com/frennkie/pivpn_vpnrpt"
+classifiers = [
+    'Development Status :: 4 - Beta',
+]
+
+[tool.poetry.dependencies]
+
+dependencies = [
+  "paho-mqtt"
+]
