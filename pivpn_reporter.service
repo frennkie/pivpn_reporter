@@ -1,0 +1,29 @@
+[Unit]
+Description=PIVPN Reporter (MQTT Client/Daemon)
+
+[Service]
+#User=daemon
+User=root
+#Group=daemon
+Group=root
+
+WorkingDirectory=/usr/local/bin
+ExecStart=/usr/bin/python3 -u /usr/local/bin/pivpn_reporter.py
+
+StandardOutput=journal
+StandardError=journal
+
+# Disable Python's buffering of STDOUT and STDERR, so that output from the
+# service shows up immediately in systemd's logs
+Environment=PYTHONUNBUFFERED=1
+
+EnvironmentFile=/etc/pivpn_reporter.env
+
+# Automatically restart the service if it crashes
+Restart=on-failure
+
+ #Configures the time to sleep before restarting a service
+RestartSec=3s
+
+[Install]
+WantedBy=multi-user.target
