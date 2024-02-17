@@ -3,8 +3,10 @@
 import json
 import logging
 import os
+import signal
 import sys
 import threading
+import time
 from typing import Optional
 
 import paho.mqtt.client as mqtt
@@ -14,7 +16,7 @@ from typing_extensions import Annotated, List  # Python3.6+
 __version__ = "0.1.0"
 
 logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s %(levelname)-6s %(message)s')
+                    format='%(levelname)-6s %(message)s')
 
 
 def version_callback(value: bool):
@@ -23,7 +25,7 @@ def version_callback(value: bool):
         raise typer.Exit()
 
 
-class MqttPublishingClient:  # MPC
+class MqttClient:  # MC
     def __init__(self,
                  mqtt_host: str,
                  mqtt_port: int,
@@ -38,33 +40,61 @@ class MqttPublishingClient:  # MPC
         self.mqtt_port = mqtt_port
         self.mqtt_user = mqtt_user
         self.mqtt_password = mqtt_password
-        self.discovery_topic_prefix = discovery_topic_prefix
 
-        # ensure trailing slash on topic_prefix
-        if topic_prefix.endswith('/'):
-            self.topic_prefix = topic_prefix
+        # ensure there is no trailing slash on discovery_topic_prefix
+        if discovery_topic_prefix.endswith('/'):
+            self.discovery_topic_prefix = discovery_topic_prefix[:-1]
         else:
-            self.topic_prefix = f'{topic_prefix}/'
+            self.discovery_topic_prefix = discovery_topic_prefix
 
-        # Timer configuration
+        # ensure there is no trailing slash on topic_prefix
+        if topic_prefix.endswith('/'):
+            self.topic_prefix = topic_prefix[:-1]
+        else:
+            self.topic_prefix = topic_prefix
+
         self.update_interval = update_interval
-        self.end_period_timer = threading.Timer(self.update_interval * 1.0, self.period_timeout_handler)
+
+        # register signal handler
+        signal.signal(signal.SIGINT, self.signal_handler)
+
+        # MQTT Client
+        self.client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+
+        self.client.on_connect = self.on_connect
+        self.client.on_disconnect = self.on_disconnect
+
+        self.client.username_pw_set(self.mqtt_user, self.mqtt_password)
+        self.client.will_set(f'{self.topic_prefix}/status', payload='offline', qos=0, retain=True)
 
         # custom parameters
         self.vpn_type = vpn_type
 
-        # custom attributes derived from parameters
-        self.will = f'{self.topic_prefix}status'  # set last will
-
         # custom attributes
         self.client_list: List[str] = []
 
-        # MQTT Client
-        try:
-            self.client = mqtt.Client()
-        except TypeError:
-            logging.error("whelp")
-            self.client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+    def on_connect(self, client, userdata, flags, rc, properties=None):
+        logging.debug('--> on_connect')
+        logging.debug(f'all: {client} - {userdata} - {flags} - {rc} - {properties}')
+        if rc != 0:
+            logging.error(f'Connection failed with reason code: {rc}')
+            sys.exit(1)
+        else:
+            logging.info(f'Connection successful with reason code: {rc}')
+
+            logging.debug(f'Initial publishing of status')
+            self.client.publish(f'{self.topic_prefix}/status', payload='online', qos=0, retain=True)
+
+            for client in self.client_list:
+                logging.debug(f'Publishing discovery for {client}')
+                self.publish_discovery(client)
+
+    def on_disconnect(self, client, userdata, rc=0):
+        logging.debug(f'--> on_disconnected - reason code: {rc}')
+        client.loop_stop()
+
+    def on_message(self, client, userdata, message):
+        logging.debug(f'--> on_message: {message.topic} {message.payload}')
 
     def run(self):
         # print key configuration settings
@@ -73,73 +103,34 @@ class MqttPublishingClient:  # MPC
         logging.info(f'Discovery topic prefix: {self.discovery_topic_prefix}')
         logging.info(f'Topic prefix: {self.topic_prefix}')
         logging.info(f'VPN type: {self.vpn_type}')
-        logging.info(f'Update interval: {self.end_period_timer.interval}')
+        logging.info(f'Update interval: {self.update_interval}')
         logging.info(f'### SETTINGS End ###')
+
+        self.client.connect(self.mqtt_host, self.mqtt_port, 60)
+
+        # start MQTT loop
+        self.client.loop_start()
 
         # get initial client list
         self.client_list = self.get_client_list(self.vpn_type)
         logging.info('Initial client list...')
         logging.info(self.client_list)
 
-        self.client.on_connect = self.on_connect
-        self.client.on_disconnect = self.on_disconnect
-        self.client.on_message = self.on_message
+        while True:
+            logging.debug(f'Active threads: {threading.active_count()}')
+            if threading.active_count() == 1:
+                logging.error(f'Only one thread running, should be at least two -> exiting.')
+                sys.exit(1)
 
-        self.client.username_pw_set(self.mqtt_user, self.mqtt_password)
-        self.client.will_set(self.will, payload='offline', qos=0, retain=True)
+            # call regular update
+            self.regular_update()
 
-        self.client.connect(self.mqtt_host, self.mqtt_port, 60)
+            # sleep for a while
+            time.sleep(self.update_interval)
 
-        # start MQTT loop
-        self.client.loop_forever()
-
-    def start_period_timer(self):
-        """start the timer"""
-        logging.debug('--> start_period_timer')
-
-        logging.debug(f'timer {self.end_period_timer}')
-        logging.debug(f'active threads {threading.active_count()}')
-
-        if self.end_period_timer.is_alive():
-            logging.debug("Timer is already running - stopping it")
-            self.end_period_timer.cancel()
-
-        # new timer object
-        self.end_period_timer = threading.Timer(self.update_interval * 1.0, self.period_timeout_handler)
-        self.end_period_timer.start()
-        logging.info('Timer Started')
-
-    def on_connect(self, client, userdata, flags, rc, properties=None):
-        logging.debug('--> on_connect')
-        logging.debug(f'all: {client} - {userdata} - {flags} - {rc} - {properties}')
-        if rc == 0:
-            logging.info(f'Connection successful with result code: {rc}')
-        else:
-            logging.error(f'Connection failed with result code: {rc}')
-            self.client.loop_stop()
-            sys.exit(1)
-
-        # start period timer
-        self.start_period_timer()
-
-        state_topic = f'{self.topic_prefix}status'
-        logging.debug(f'Initial publishing of status: {state_topic}')
-        self.client.publish(state_topic, payload='online', qos=0, retain=True)
-
-        for client in self.client_list:
-            logging.debug(f'Publishing discovery for {client}')
-            self.publish_discovery(client)
-
-    def on_disconnect(self, client, userdata, rc=0):
-        logging.debug(f'--> on_disconnected - result code: {rc}')
-        client.loop_stop()
-
-    def on_message(self, client, userdata, message):
-        logging.debug(f'--> on_message: {message.topic} {message.payload}')
-
-    def period_timeout_handler(self):
-        """Custom: Timer interrupt handler"""
-        logging.info('Timer interrupt')
+    def regular_update(self):
+        """Regular update"""
+        logging.info('--> regular_update')
 
         stored_client_list = self.client_list.copy()
         logging.debug('Stored client list...')
@@ -168,7 +159,6 @@ class MqttPublishingClient:  # MPC
                 self.remove_discovery(client_name)
 
         self.publish_client_attributes()
-        self.start_period_timer()
 
     @staticmethod
     def get_client_list(vpn_type: str = 'WireGuard') -> List[str]:
@@ -283,6 +273,16 @@ class MqttPublishingClient:  # MPC
             topic = f'{self.topic_prefix}{client_name}/state'
             self.client.publish(topic, state, retain=False)  # Publish state
 
+    def signal_handler(self, sig, frame):
+        logging.debug('received SIGINT')
+
+        self.client.publish(f'{self.topic_prefix}/status', payload='goodbye', qos=0, retain=True)
+
+        self.client.disconnect()
+
+        logging.info('--> clean exit')
+        sys.exit(0)
+
 
 def main(
         mqtt_host: Annotated[
@@ -333,7 +333,7 @@ def main(
     else:
         logging.getLogger().setLevel(logging.INFO)
 
-    mpc = MqttPublishingClient(
+    mpc = MqttClient(
         mqtt_host=mqtt_host,
         mqtt_port=mqtt_port,
         mqtt_user=mqtt_user,
