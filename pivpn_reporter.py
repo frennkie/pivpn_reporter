@@ -219,7 +219,7 @@ class MqttClient:  # MC
     def remove_discovery(self, client_name: str):
         """Remove discovery data for a client"""
         logging.debug('--> publish_discovery(' + client_name + ')')
-        discovery_topic = f'{self.discovery_topic_prefix}{client_name}/config'
+        discovery_topic = f'{self.discovery_topic_prefix}/{client_name}/config'
         payload = {}
         self.client.publish(discovery_topic, json.dumps(payload), 0, retain=True)
 
@@ -266,9 +266,9 @@ class MqttClient:  # MC
             logging.info(data)
             logging.info('Client state...')
             logging.info(state)
-            topic = f'{self.topic_prefix}{client_name}/attr'
+            topic = f'{self.topic_prefix}/{client_name}/attr'
             self.client.publish(topic, str(data), retain=False)  # Publish attributes
-            topic = f'{self.topic_prefix}{client_name}/state'
+            topic = f'{self.topic_prefix}/{client_name}/state'
             self.client.publish(topic, state, retain=False)  # Publish state
 
     def signal_handler(self, sig, frame):
