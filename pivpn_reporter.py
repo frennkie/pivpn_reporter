@@ -206,8 +206,6 @@ class MqttClient:  # MC
         payload['name'] = f'VPN Client {client_name.title()}'
         payload['unique_id'] = f'VPN{self.vpn_type}{client_name}Client'
         payload['state_topic'] = f'{self.topic_prefix}/{client_name}/state'
-        # payload['payload_available'] = 'Online'  # ToDo(frennkie) is this needed?
-        # payload['payload_not_available'] = 'Offline'  # ToDo(frennkie) is this needed?
         payload['availability_topic'] = f'{self.topic_prefix}/status'
         payload['icon'] = 'mdi:vpn'
         payload['json_attributes_topic'] = f'{self.topic_prefix}/{client_name}/attr'
