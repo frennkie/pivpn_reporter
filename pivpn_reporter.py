@@ -82,12 +82,13 @@ class MqttClient:  # MC
         else:
             logging.info(f'Connection successful with reason code: {rc}')
 
-            logging.debug(f'Initial publishing of status')
-            self.client.publish(f'{self.topic_prefix}/status', payload='online', qos=0, retain=True)
-
+            logging.debug(f'current client list: {self.client_list}')
             for client in self.client_list:
                 logging.debug(f'Publishing discovery for {client}')
                 self.publish_discovery(client)
+
+            logging.debug(f'Initial publishing of status')
+            self.client.publish(f'{self.topic_prefix}/status', payload='online', qos=0, retain=True)
 
     def on_disconnect(self, client, userdata, rc=0):
         logging.debug(f'--> on_disconnected - reason code: {rc}')
